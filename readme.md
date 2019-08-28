@@ -15,4 +15,4 @@ The goal of the scan is to gain insights into the structure used in an azure dev
 The outcome of the scan are a set of json files with guid\id references to map to the other files. During the visualisation tie everything together.
 For visualisation we looked to https://github.com/strathausen/dracula
 
-![image.png](.attachments\azdo-example.png)
+![image.png](images/azdo-example.png)
