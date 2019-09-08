@@ -145,7 +145,7 @@ function Set-PatToken
     $env:Token = "Basic $encodedCreds"
 }
 
-function get-all-repos{
+function Get-AllRepos{
     [CmdletBinding()]
     [OutputType([object])]
     param
@@ -196,14 +196,14 @@ function GetCommits{
 
 $BaseUri = "https://dev.azure.com/$Organization/$AzdoProject"
 Set-PatToken
-$allRepos = get-all-repos
+$allRepos = Get-AllRepos
 
 $getCommitCounts = GetCommits $allRepos
-write-host $(ConvertTo-Json $getCommitCounts
+Write-Host $(ConvertTo-Json $getCommitCounts
 )
 $connectedBuildDefinitions = Get-ConnectedBuildDefinitions -Repositories $allRepos
 
-write-host $(ConvertTo-Json $connectedBuildDefinitions)
+Write-Host $(ConvertTo-Json $connectedBuildDefinitions)
 
 $connectedReleases = Get-ConnectedReleaseDefinitions $connectedBuildDefinitions
 
