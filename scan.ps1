@@ -196,8 +196,17 @@ function GetCommits{
 
 $BaseUri = "https://dev.azure.com/$Organization/$AzdoProject"
 Set-PatToken
-$allRepos = Get-AllRepos
 
+try {
+    $allRepos = Get-AllRepos   
+}
+catch {
+    $ErrorMessage = $_.Exception.Message
+    $FailedItem = $_.Exception.ItemName
+    # error occured in first call, exit now
+    Write-Error "An error occured in loading the repositories. $ErrorMessage $FailedItem"
+    return
+}
 $getCommitCounts = GetCommits $allRepos
 Write-Host $(ConvertTo-Json $getCommitCounts
 )
