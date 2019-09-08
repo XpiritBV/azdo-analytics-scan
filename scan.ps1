@@ -180,7 +180,6 @@ function GetCommits{
     )
     [pscustomobject[]] $results =  @()
 
-
     foreach ($repository in $repositories) {
         $buildUrl = "$($BaseUri)/_apis/git/repositories/$($repository.Id)/commits?searchCriteria.toDate=8/23/2019&searchCriteria.fromDate=1/1/2019"
         $commits = Invoke-RestMethod -Uri $buildUrl -Headers @{Authorization = $env:Token} -ContentType "application/json" -Method Get 
@@ -197,6 +196,7 @@ function GetCommits{
 $BaseUri = "https://dev.azure.com/$Organization/$AzdoProject"
 Set-PatToken
 
+# load all repos
 try {
     $allRepos = Get-AllRepos   
 }
@@ -207,13 +207,29 @@ catch {
     Write-Error "An error occured in loading the repositories. $ErrorMessage $FailedItem"
     return
 }
-$getCommitCounts = GetCommits $allRepos
-Write-Host $(ConvertTo-Json $getCommitCounts
-)
+
+# load the number of commits from all repos
+$repoCommitCounts = GetCommits $allRepos
+Write-Verbose "Commit counts per repo:"
+Write-Verbose $(ConvertTo-Json $repoCommitCounts)
+
+# Get all build definitions and the connections to the repos
+Write-Verbose "Build definitions:"
 $connectedBuildDefinitions = Get-ConnectedBuildDefinitions -Repositories $allRepos
+Write-Verbose $(ConvertTo-Json $connectedBuildDefinitions)
 
-Write-Host $(ConvertTo-Json $connectedBuildDefinitions)
-
+# Get all release definitions and the connections to the builds
 $connectedReleases = Get-ConnectedReleaseDefinitions $connectedBuildDefinitions
+Write-Verbose "Release definitions:"
+Write-Verbose $(ConvertTo-Json $connectedReleases)
 
-Write-Host $(ConvertTo-Json $connectedReleases)
+# load central object:
+$data = [pscustomobject]@{
+    Repositories = $allRepos
+    CommitCounts = $repoCommitCounts
+    BuildDefinitions = $connectedBuildDefinitions
+    ReleaseDefinitions = $connectedReleases
+}
+Write-Host $data
+
+# todo: spool the data to an export file
