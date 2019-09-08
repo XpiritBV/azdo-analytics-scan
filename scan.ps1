@@ -15,7 +15,8 @@ function Get-ConnectedBuildDefinitions
         [pscustomobject[]] $repositories
     )
     [pscustomobject[]] $results =  @()
-
+    
+    Write-Host "Loading build definitions"
     $buildUrl = "$($BaseUri)/_apis/build/definitions"
     $definitions = Invoke-RestMethod -Uri $buildUrl -Headers @{Authorization = $env:Token} -ContentType "application/json" -Method Get 
 
@@ -77,6 +78,8 @@ function Get-ConnectedReleaseDefinitions
         [pscustomobject[]] $ConnectedBuilds
     )
     [pscustomobject[]] $results =  @()
+
+    Write-Host "Loading release definitions"
 
     # change baseUri
     $BaseUri = "https://vsrm.dev.azure.com/$Organization/$AzdoProject"
@@ -153,7 +156,8 @@ function Get-AllRepos{
        
     )
     [pscustomobject[]] $results =  @()
-
+    
+    Write-Host "Loading repositories"
     #GET https://dev.azure.com/{organization}/{project}/_apis/git/repositories?includeLinks={includeLinks}&includeAllUrls={includeAllUrls}&includeHidden={includeHidden}&api-version=5.1
 
     $repoUrl = "$($BaseUri)/_apis/git/repositories?includeLinks=true&includeAllUrls=true&includeHidden=true&api-version=5.1"
@@ -180,6 +184,7 @@ function GetCommits{
     )
     [pscustomobject[]] $results =  @()
 
+    Write-Host "Loading commits"
     foreach ($repository in $repositories) {
         $buildUrl = "$($BaseUri)/_apis/git/repositories/$($repository.Id)/commits?searchCriteria.toDate=8/23/2019&searchCriteria.fromDate=1/1/2019"
         $commits = Invoke-RestMethod -Uri $buildUrl -Headers @{Authorization = $env:Token} -ContentType "application/json" -Method Get 
@@ -230,6 +235,7 @@ $data = [pscustomobject]@{
     BuildDefinitions = $connectedBuildDefinitions
     ReleaseDefinitions = $connectedReleases
 }
-Write-Host $data
-
-# todo: spool the data to an export file
+# spool the data to an export file
+$dataPath = ".\Data.json"
+Write-Host "Saving the data to $dataPath"
+$data | ConvertTo-Json -depth 100 | Out-File $dataPath
