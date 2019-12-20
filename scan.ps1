@@ -2,7 +2,7 @@
 param
 (
     [string] $organization, 
-    [string] $AzdoProject = "StouteDag"
+    [string] $AzdoProject
 ) 
 
 function Load-BaseUri {
@@ -18,7 +18,6 @@ function Load-BaseUri {
     Write-Host "Using this base url: " $baseUri
     return $baseUri
 }
-
 $commitsFrom = "1/12/2019 00:00:00"
 $commitsTo = "20/12/2019 00:00:00"
 
@@ -34,47 +33,52 @@ function Get-ConnectedBuildDefinitions {
     Write-Host "Loading build definitions"
     $buildUrl = "$($BaseUri)/_apis/build/definitions"
     $definitions = Invoke-RestMethod -Uri $buildUrl -Headers @{Authorization = $env:Token} -ContentType "application/json" -Method Get 
+    Write-Host "Found $($definitions.Count) build definitions"
 
-    $definitions.Value | %{
+    $branch = "master"
+
+    $definitions.Value | ForEach-Object {
         $buildUrl = "$($BaseUri)/_apis/build/definitions/$($_.id)"
         $definition = Invoke-RestMethod -Uri $buildUrl -Headers @{Authorization = $env:Token} -ContentType "application/json" -Method Get 
 
-        Write-Verbose "Analysing $($definitions.name) for mappings to $branch or triggers on +$branch"
         $added = $false;
-        foreach ($repository in $repositories) {
-            #We only need the builds that trigger based on our mainbranch location or use a tfvc mapping to the mainbranch
-            #triggers included branches are defined with a "+"
+        foreach ($repository in $repositories.Values) {
+            # We only need the builds that trigger based on our main branch location or use a tfvc mapping to the mainbranch
+            # triggers included branches are defined with a "+"
             if ($definition.repository.type -eq "TfsGit")
             {
-                if ($definition.repository.id -eq $repository.Id)
-                {
+                if ($definition.repository.id -eq $repository.Id) {
                     Write-Verbose "Found build with link to Git repo: $($definitions.name)"
-                    $results += [pscustomobject]@{
+                    $results += [pscustomobject] @{
                         repository = $repository
-                        definition = [pscustomobject]@{ 
+                        definition = [pscustomobject] @{ 
                             name = $definition.name 
                             id = $definition.id
+                            agentQueue = $definition.queue.name
                             }
                         }
-                    }
                     $added = $true
+                }
             }
             elseif ($definition.repository.type -eq "TfsVersionControl") {                
-                Write-Verbose "Found a TFVC repository: not supported (yet)"
+                Write-Warning "Found a TFVC repository: not supported (yet)"
             }
             else {
                 #could be anything else, maybe add later
+                Write-Warning "Found a $($definition.repository.type) repository: not supported (yet)"
             }
         }
 
         if (!$added)
         {
+            Write-Host "Found build definition that is NOT linked to any repository: $($definition.name)"
             # add to the list so we still have all builds
-            $results += [pscustomobject]@{
+            $results += [pscustomobject] @{
                 repository = $null
-                definition = [pscustomobject]@{ 
+                definition = [pscustomobject] @{ 
                     name = $definition.name 
                     id = $definition.id
+                    agentQueue = $definition.queue.name
                     }
                 }
         }
