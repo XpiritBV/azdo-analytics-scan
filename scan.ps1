@@ -35,8 +35,6 @@ function Get-ConnectedBuildDefinitions {
     $definitions = Invoke-RestMethod -Uri $buildUrl -Headers @{Authorization = $env:Token} -ContentType "application/json" -Method Get 
     Write-Host "Found $($definitions.Count) build definitions"
 
-    $branch = "master"
-
     $definitions.Value | ForEach-Object {
         $buildUrl = "$($BaseUri)/_apis/build/definitions/$($_.id)"
         $definition = Invoke-RestMethod -Uri $buildUrl -Headers @{Authorization = $env:Token} -ContentType "application/json" -Method Get 
