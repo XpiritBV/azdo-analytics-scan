@@ -5,22 +5,24 @@ param
     [string] $AzdoProject = "StouteDag"
 ) 
 
-$BaseUri = ""
-# change baseUri
-if ($organization.StartsWith("https://") -and !$organization.StartsWith("https://dev.azure.com")){
-    $BaseUri = "https://vsrm.dev.azure.com/$Organization/$AzdoProject"
+function Load-BaseUri {
+    $baseUri = ""
+    # change baseUri
+    if ($organization.StartsWith("https://") -and !$organization.StartsWith("https://dev.azure.com")){
+        $baseUri = "https://vsrm.dev.azure.com/$Organization/$AzdoProject"
+    }
+    else {
+        # assume on prem url
+        $baseUri = $organization
+    }
+    Write-Host "Using this base url: " $baseUri
+    return $baseUri
 }
-else {
-    # assume on prem url
-    $BaseUri = $organization
-}
-Write-Host "Using this base url: " $BaseUri
 
-$commitsFrom = "1/12/2019"
-$commitsTo = "20/12/2019"
+$commitsFrom = "1/12/2019 00:00:00"
+$commitsTo = "20/12/2019 00:00:00"
 
-function Get-ConnectedBuildDefinitions
-{
+function Get-ConnectedBuildDefinitions {
     [CmdletBinding()]
     [OutputType([object])]
     param
@@ -82,24 +84,21 @@ function Get-ConnectedBuildDefinitions
     return $results
 }
 
-function Get-ConnectedReleaseDefinitions
-{
+function Get-ConnectedReleaseDefinitions {
     [CmdletBinding()]
     [OutputType([object])]
     param
     (
         [pscustomobject[]] $ConnectedBuilds
     )
-    [pscustomobject[]] $results =  @()
+    [pscustomobject[]] $results = @()
 
     Write-Host "Loading release definitions"
-
     $releaseUrl = "$($BaseUri)/_apis/release/definitions?api-version=3.0-preview.3"
-    Write-Verbose $releaseUrl
     
     $definitions = Invoke-RestMethod -Uri $releaseUrl -Headers @{Authorization = $env:Token} -ContentType "application/json" -Method Get
 
-    $definitions.Value | %{
+    $definitions.Value | ForEach-Object {
         $releaseUrl = "$($BaseUri)/_apis/release/definitions/$($_.Id)?api-version=3.0-preview.3"
         $definition = Invoke-RestMethod -Uri $releaseUrl -Headers @{Authorization = $env:Token} -ContentType "application/json" -Method Get 
 
@@ -147,8 +146,7 @@ function Get-ConnectedReleaseDefinitions
     return $results
 }
 
-function Set-PatToken
-{
+function Set-PatToken {
     if([string]::IsNullOrEmpty($env:PAT))
     {
         throw "No PAT provided."
@@ -158,25 +156,26 @@ function Set-PatToken
     $env:Token = "Basic $encodedCreds"
 }
 
-function Get-AllRepos{
+function Get-AllRepos {
     [CmdletBinding()]
     [OutputType([object])]
     param
     (
        
     )
-    [pscustomobject[]] $results =  @()
-    
-    Write-Host "Loading repositories"
-    #GET https://dev.azure.com/{organization}/{project}/_apis/git/repositories?includeLinks={includeLinks}&includeAllUrls={includeAllUrls}&includeHidden={includeHidden}&api-version=5.1
 
+    $results = New-Object PSObject 
+    $results | Add-Member -NotePropertyName Count -NotePropertyValue 0
+    $results | Add-Member -NotePropertyName Values -NotePropertyValue @()
+
+    Write-Host "Loading repositories"
     $repoUrl = "$($BaseUri)/_apis/git/repositories?includeLinks=true&includeAllUrls=true&includeHidden=true&api-version=5.1"
-    Write-Verbose $repoUrl
     
     $repos = Invoke-RestMethod -Uri $repoUrl -Headers @{Authorization = $env:Token} -ContentType "application/json" -Method Get
-
-    $repos.Value | %{
-        $results += [pscustomobject]@{
+    $results.Count = $repos.count
+    
+    $repos.Value | ForEach-Object {
+        $results.Values += [pscustomobject]@{
             Id = $_.id
             Name = $_.name
             }
@@ -190,18 +189,20 @@ function GetCommits{
     [OutputType([object])]
     param
     (
-        [pscustomobject[]] $repositories
+        [pscustomobject] $repositories
     )
     [pscustomobject[]] $results =  @()
 
     Write-Host "Loading commits"
-    foreach ($repository in $repositories) {
-        $buildUrl = "$($BaseUri)/_apis/git/repositories/$($repository.Id)/commits?searchCriteria.toDate=$($commitsFrom)&searchCriteria.fromDate=$($commitsTo)"
+    foreach ($repository in $repositories.Values) {
+        $buildUrl = "$($BaseUri)/_apis/git/repositories/$($repository.Id)/commits?searchCriteria.toDate=$($commitsTo)&searchCriteria.fromDate=$($commitsFrom)"
         $commits = Invoke-RestMethod -Uri $buildUrl -Headers @{Authorization = $env:Token} -ContentType "application/json" -Method Get 
 
-        $results += [pscustomobject]@{
+        $results += [pscustomobject] @{
             repository = $repository
             commitcounts = $commits.count
+            commitsFrom = $commitsFrom
+            commitsTo = $commitsTo
         }
     }
     #return list of repository ids with builds
@@ -209,6 +210,7 @@ function GetCommits{
 }
 
 Set-PatToken
+$BaseUri = Load-BaseUri
 
 # load all repos
 try {
@@ -225,27 +227,26 @@ catch {
 
 # load the number of commits from all repos
 $repoCommitCounts = GetCommits $allRepos
-Write-Verbose "Commit counts per repo:"
-Write-Verbose $(ConvertTo-Json $repoCommitCounts)
+#Write-Verbose $(ConvertTo-Json $repoCommitCounts)
 
 # Get all build definitions and the connections to the repos
 Write-Host "Build definitions:"
 $connectedBuildDefinitions = Get-ConnectedBuildDefinitions -Repositories $allRepos
 Write-Host "Found $($connectedBuildDefinitions.Count) connected build definitions"
-Write-Verbose $(ConvertTo-Json $connectedBuildDefinitions)
+#Write-Verbose $(ConvertTo-Json $connectedBuildDefinitions)
 
 # Get all release definitions and the connections to the builds
-$connectedReleases = Get-ConnectedReleaseDefinitions $connectedBuildDefinitions
-Write-Host "Release definitions:"
-Write-Host "Found $($connectedReleases.Count) connected release definitions"
-Write-Verbose $(ConvertTo-Json $connectedReleases)
+#$connectedReleases = Get-ConnectedReleaseDefinitions $connectedBuildDefinitions
+#Write-Host "Release definitions:"
+#Write-Host "Found $($connectedReleases.Count) connected release definitions"
+#Write-Verbose $(ConvertTo-Json $connectedReleases)
 
 # load central object:
 $data = [pscustomobject]@{
     Repositories = $allRepos
     CommitCounts = $repoCommitCounts
     BuildDefinitions = $connectedBuildDefinitions
-    ReleaseDefinitions = $connectedReleases
+    #ReleaseDefinitions = $connectedReleases
 }
 # spool the data to an export file
 $dataPath = ".\Data.json"
