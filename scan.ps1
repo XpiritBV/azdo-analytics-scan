@@ -2,8 +2,8 @@
 param
 (
     [string] $organization, 
-    [string] $AzdoProject
-) 
+    [string] $AzdoProject = "StouteDag"
+)
 
 function Load-BaseUri {
     $baseUri = ""
@@ -99,6 +99,7 @@ function Get-ConnectedReleaseDefinitions {
     $releaseUrl = "$($BaseUri)/_apis/release/definitions?api-version=3.0-preview.3"
     
     $definitions = Invoke-RestMethod -Uri $releaseUrl -Headers @{Authorization = $env:Token} -ContentType "application/json" -Method Get
+    Write-Host "Found $($definitions.Count) release definitions"
 
     $definitions.Value | ForEach-Object {
         $releaseUrl = "$($BaseUri)/_apis/release/definitions/$($_.Id)?api-version=3.0-preview.3"
@@ -106,17 +107,14 @@ function Get-ConnectedReleaseDefinitions {
 
         Write-Verbose "Analysing $($_.name) for artifacts referencing to $($ConnectedBuilds.Name)"
         $added = $false;
-        foreach ($connectedBuild in $ConnectedBuilds)
-        {
-            #does the release have any artifact that is originated from the connected builds
-            #then we need to change that to        
+        foreach ($connectedBuild in $ConnectedBuilds) {
+            # Does the release have any artifact that is originated from the connected builds
+            # Then we need to change that to        
             $buildAsArtefact = $definition.artifacts | Where-Object {$_.type -eq "Build"}
             
-            foreach ($artefact in $buildAsArtefact)
-            {
+            foreach ($artefact in $buildAsArtefact) {
                 if ($artefact.type -eq "Build") {
-                    if ($connectedBuild.definition.id -eq $buildAsArtefact.definitionReference.definition.id)  
-                    {              
+                    if ($connectedBuild.definition.id -eq $buildAsArtefact.definitionReference.definition.id) {              
                         Write-Verbose "Found $($definition.name)"
                         $results += [pscustomobject]@{
                             ReleaseId = $definition.Id
@@ -133,16 +131,17 @@ function Get-ConnectedReleaseDefinitions {
                 else {
                     Write-Verbose "Found unsupported release artefact type $($artefact.type)"
                 }
-
-                if (!$added) {
-                    $results += [pscustomobject]@{
-                        ReleaseId = $definition.Id
-                        ReleaseName = $definition.Name
-                        BuildId = $connectedBuild.definition.id
-                        BuildName = $connectedBuild.definition.name
-                        }
-                }
             }
+        }
+        
+        if (!$added) {
+            Write-Host "Found a release that we could not link to a build: $($definition.Name)"
+            $results += [pscustomobject]@{
+                ReleaseId = $definition.Id
+                ReleaseName = $definition.Name
+                BuildId = $connectedBuild.definition.id
+                BuildName = $connectedBuild.definition.name
+                }
         }
     }
     return $results
@@ -238,9 +237,9 @@ Write-Host "Found $($connectedBuildDefinitions.Count) connected build definition
 #Write-Verbose $(ConvertTo-Json $connectedBuildDefinitions)
 
 # Get all release definitions and the connections to the builds
-#$connectedReleases = Get-ConnectedReleaseDefinitions $connectedBuildDefinitions
-#Write-Host "Release definitions:"
-#Write-Host "Found $($connectedReleases.Count) connected release definitions"
+$connectedReleases = Get-ConnectedReleaseDefinitions $connectedBuildDefinitions
+Write-Host "Release definitions:"
+Write-Host "Found $($connectedReleases.Count) connected release definitions"
 #Write-Verbose $(ConvertTo-Json $connectedReleases)
 
 # load central object:
