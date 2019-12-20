@@ -5,6 +5,19 @@ param
     [string] $AzdoProject = "StouteDag"
 ) 
 
+$BaseUri = ""
+# change baseUri
+if ($organization.StartsWith("https://") -and !$organization.StartsWith("https://dev.azure.com")){
+    $BaseUri = "https://vsrm.dev.azure.com/$Organization/$AzdoProject"
+}
+else {
+    # assume on prem url
+    $BaseUri = $organization
+}
+Write-Host "Using this base url: " $BaseUri
+
+$commitsFrom = "1/12/2019"
+$commitsTo = "20/12/2019"
 
 function Get-ConnectedBuildDefinitions
 {
@@ -80,9 +93,6 @@ function Get-ConnectedReleaseDefinitions
     [pscustomobject[]] $results =  @()
 
     Write-Host "Loading release definitions"
-
-    # change baseUri
-    $BaseUri = "https://vsrm.dev.azure.com/$Organization/$AzdoProject"
 
     $releaseUrl = "$($BaseUri)/_apis/release/definitions?api-version=3.0-preview.3"
     Write-Verbose $releaseUrl
@@ -186,7 +196,7 @@ function GetCommits{
 
     Write-Host "Loading commits"
     foreach ($repository in $repositories) {
-        $buildUrl = "$($BaseUri)/_apis/git/repositories/$($repository.Id)/commits?searchCriteria.toDate=8/23/2019&searchCriteria.fromDate=1/1/2019"
+        $buildUrl = "$($BaseUri)/_apis/git/repositories/$($repository.Id)/commits?searchCriteria.toDate=$($commitsFrom)&searchCriteria.fromDate=$($commitsTo)"
         $commits = Invoke-RestMethod -Uri $buildUrl -Headers @{Authorization = $env:Token} -ContentType "application/json" -Method Get 
 
         $results += [pscustomobject]@{
@@ -198,12 +208,12 @@ function GetCommits{
     return $results
 }
 
-$BaseUri = "https://dev.azure.com/$Organization/$AzdoProject"
 Set-PatToken
 
 # load all repos
 try {
-    $allRepos = Get-AllRepos   
+    $allRepos = Get-AllRepos
+    Write-Host "Found $($allRepos.Count) repositories"
 }
 catch {
     $ErrorMessage = $_.Exception.Message
@@ -219,13 +229,15 @@ Write-Verbose "Commit counts per repo:"
 Write-Verbose $(ConvertTo-Json $repoCommitCounts)
 
 # Get all build definitions and the connections to the repos
-Write-Verbose "Build definitions:"
+Write-Host "Build definitions:"
 $connectedBuildDefinitions = Get-ConnectedBuildDefinitions -Repositories $allRepos
+Write-Host "Found $($connectedBuildDefinitions.Count) connected build definitions"
 Write-Verbose $(ConvertTo-Json $connectedBuildDefinitions)
 
 # Get all release definitions and the connections to the builds
 $connectedReleases = Get-ConnectedReleaseDefinitions $connectedBuildDefinitions
-Write-Verbose "Release definitions:"
+Write-Host "Release definitions:"
+Write-Host "Found $($connectedReleases.Count) connected release definitions"
 Write-Verbose $(ConvertTo-Json $connectedReleases)
 
 # load central object:
